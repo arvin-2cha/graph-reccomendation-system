@@ -4,6 +4,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from collections import defaultdict
+from pathlib import Path
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -15,7 +16,19 @@ st.set_page_config(
 # ── Load data ─────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/interactions.csv")
+    data_path = Path(__file__).resolve().parent / "data" / "interactions.csv"
+    df = pd.read_csv(data_path)
+    required_columns = {"user_id", "item_id", "interaction"}
+    missing_columns = required_columns - set(df.columns)
+    if missing_columns:
+        raise ValueError(
+            "The interaction dataset is missing required column(s): "
+            + ", ".join(sorted(missing_columns))
+        )
+    if df.empty:
+        raise ValueError("The interaction dataset contains no records.")
+    if df[["user_id", "item_id"]].isna().any().any():
+        raise ValueError("The interaction dataset contains a blank user_id or item_id.")
     return df
 
 
@@ -152,6 +165,9 @@ def main():
     except FileNotFoundError:
         st.error("❌ Could not find `data/interactions.csv`. Make sure it exists.")
         st.stop()
+    except ValueError as exc:
+        st.error(f"❌ Invalid interaction dataset: {exc}")
+        st.stop()
 
     # Build graph (cache requires hashable key, so pass as tuple-of-tuples)
     G = build_graph((tuple(df.columns), [tuple(r) for r in df.values]))
@@ -208,7 +224,7 @@ def main():
                     )
                 ]
             )
-            st.dataframe(sim_df, width='stretch', hide_index=True)
+            st.dataframe(sim_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
@@ -233,13 +249,14 @@ def main():
                     for i, (item, score) in enumerate(recommendations)
                 ]
             )
-            st.dataframe(rec_df, width='stretch', hide_index=True)
+            st.dataframe(rec_df, use_container_width=True, hide_index=True)
 
             # Show top 3 explicitly if top_n == 5
             if top_n == 5 and len(recommendations) >= 3:
                 st.markdown("**Top 3 (highlighted):**")
+                medals = ["🥇", "🥈", "🥉"]
                 for i, (item, score) in enumerate(recommendations[:3]):
-                    st.markdown(f"&nbsp;&nbsp;🥇🥈🥉"[i] + f" **{item}** — recommended by {score} similar user(s)")
+                    st.markdown(f"&nbsp;&nbsp;{medals[i]} **{item}** — recommended by {score} similar user(s)")
 
     st.divider()
 
